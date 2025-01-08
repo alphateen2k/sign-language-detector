@@ -10,7 +10,7 @@ import os
 # Initialize webcam and hand detector
 cap = cv2.VideoCapture(0)
 detector = HandDetector(maxHands=1)
-classifier=Classifier("model\keras_model.h5","model\labels.txt")
+classifier=Classifier(r"C:\Users\kishore l\sign-language-detector\model\keras_model.h5",r"C:\Users\kishore l\sign-language-detector\model\labels.txt")
 # Parameters
 offset = 20
 imgSize = 300
