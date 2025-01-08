@@ -16,7 +16,7 @@ offset = 20
 imgSize = 300
 counter = 0
 
-labels=["A","B"]
+labels=["A","B"] 
 
 
 
