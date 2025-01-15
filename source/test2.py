@@ -1,59 +1,24 @@
 import cv2
 import numpy as np
-import math
-from cvzone.HandTrackingModule import HandDetector
-import tensorflow as tf
 import time
 import os
+import keras
+import math
+import tensorflow as tf
+from cvzone.HandTrackingModule import HandDetector
 
-# Function to load model and handle compatibility
-def load_model(model_path):
-    try:
-        # Load the model using the updated TensorFlow function
-        model = tf.keras.models.load_model(model_path, compile=False)
-    except Exception as e:
-        print(f"Error loading model: {e}")
-        print("Ensure the model is converted to a compatible TensorFlow version.")
-        raise e
-    return model
-
-# Function for prediction
-def get_prediction(model, img, img_size):
-    # Preprocess image
-    img_resized = cv2.resize(img, (img_size, img_size))
-    img_normalized = img_resized / 255.0  # Normalize pixel values
-    img_input = np.expand_dims(img_normalized, axis=0)  # Add batch dimension
-    predictions = model.predict(img_input)
-    return predictions
+# Load the pre-trained model (replace with your model path)
+model = keras.models.load_model(r"C:\Users\kishore l\sign-language-detector\model\keras_model.h5")
 
 # Initialize webcam and hand detector
 cap = cv2.VideoCapture(0)
 detector = HandDetector(maxHands=1)
 
-# Load the trained model
-model_path = "model/keras_model.h5"
-labels_path = "model/labels.txt"
-
-# Ensure model file exists
-if not os.path.exists(model_path) or not os.path.exists(labels_path):
-    raise FileNotFoundError("Model or labels file not found. Ensure the paths are correct.")
-
-model = load_model(model_path)
-
-# Load labels
-with open(labels_path, "r") as file:
-    labels = [line.strip() for line in file.readlines()]
-
 # Parameters
-offset = 20
-img_size = 300
+imgSize = 300
 
 while True:
     success, img = cap.read()
-    if not success:
-        print("Failed to capture image from webcam.")
-        break
-
     hands, img = detector.findHands(img)
 
     if hands:
@@ -61,49 +26,60 @@ while True:
         x, y, w, h = hand['bbox']
 
         # Ensure cropping coordinates stay within the image boundaries
-        y1 = max(0, y - offset)
-        y2 = min(img.shape[0], y + h + offset)
-        x1 = max(0, x - offset)
-        x2 = min(img.shape[1], x + w + offset)
+        y1 = max(0, y - 20)
+        y2 = min(img.shape[0], y + h + 20)
+        x1 = max(0, x - 20)
+        x2 = min(img.shape[1], x + w + 20)
 
         # Crop the hand region
-        img_crop = img[y1:y2, x1:x2]
+        imgCrop = img[y1:y2, x1:x2]
 
-        if img_crop.size > 0:  # Proceed only if cropped region is valid
+        # Proceed only if the cropped region is valid
+        if imgCrop.size > 0:
             # Create a blank white image
-            img_white = np.ones((img_size, img_size, 3), np.uint8) * 255
+            imgWhite = np.ones((imgSize, imgSize, 3), np.uint8) * 255
 
-            aspect_ratio = h / w
-            if aspect_ratio > 1:  # Tall hand
-                scale = img_size / h
-                new_width = math.ceil(scale * w)
-                img_resized = cv2.resize(img_crop, (new_width, img_size))
-                w_gap = math.ceil((img_size - new_width) / 2)
-                img_white[:, w_gap:w_gap + new_width] = img_resized
+            # Check the shape of the cropped image
+            imgCropShape = imgCrop.shape
+
+            # Calculate the aspect ratio
+            aspectRatio = h / w
+
+            if aspectRatio > 1:  # Tall hand
+                k = imgSize / h
+                wCal = math.ceil(k * w)
+                imgResize = cv2.resize(imgCrop, (wCal, imgSize))  # Resize maintaining aspect ratio
+                wGap = math.ceil((imgSize - wCal) / 2)
+                imgWhite[:, wGap:wCal + wGap] = imgResize  # Center the image horizontally
             else:  # Wide hand
-                scale = img_size / w
-                new_height = math.ceil(scale * h)
-                img_resized = cv2.resize(img_crop, (img_size, new_height))
-                h_gap = math.ceil((img_size - new_height) / 2)
-                img_white[h_gap:h_gap + new_height, :] = img_resized
+                k = imgSize / w
+                hCal = math.ceil(k * h)
+                imgResize = cv2.resize(imgCrop, (imgSize, hCal))  # Resize maintaining aspect ratio
+                hGap = math.ceil((imgSize - hCal) / 2)
+                imgWhite[hGap:hCal + hGap, :] = imgResize  # Center the image vertically
 
-            # Get predictions
-            predictions = get_prediction(model, img_white, img_size)
-            predicted_label = labels[np.argmax(predictions)]
-            confidence = np.max(predictions)
+            # Prepare image for model prediction
+            imgWhite = cv2.cvtColor(imgWhite, cv2.COLOR_BGR2RGB)  # Convert to RGB
+            imgWhite = np.expand_dims(imgWhite, axis=0) / 255.0  # Normalize and reshape for model input
 
-            # Display results
-            print(f"Prediction: {predicted_label}, Confidence: {confidence:.2f}")
+            # Predict the label
+            predictions = model.predict(imgWhite)
+            label_idx = np.argmax(predictions)  # Get the index of the highest probability
 
-            # Display cropped and white images
-            cv2.imshow("ImageCrop", img_crop)
-            cv2.imshow("ImageWhite", img_white)
+            # Map index to label (assuming labels are A, B, C)
+            labels = ['A', 'B', 'C']
+            predicted_label = labels[label_idx]
+
+            # Display prediction on the image
+            cv2.putText(img, f"Prediction: {predicted_label}", (50, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+            cv2.imshow("Predicted Image", imgWhite[0])
 
     # Display the original image
     cv2.imshow("Image", img)
 
-    # Break on pressing 'q'
-    if cv2.waitKey(1) & 0xFF == ord('q'):
+    # Wait for key press
+    key = cv2.waitKey(1)
+    if key == 27:  # Exit when ESC is pressed
         break
 
 # Release the webcam and close all windows
